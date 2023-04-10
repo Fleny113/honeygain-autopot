@@ -1,7 +1,9 @@
-using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Discord;
+using Discord.Webhook;
+using Microsoft.Extensions.Options;
 
 namespace HoneyGainAutoRewardPot;
 
@@ -10,14 +12,17 @@ public class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _interval;
+    private readonly DiscordWebhookClient _webhook;
 
     private static DateTime _lastRun = DateTime.UtcNow.AddDays(-1);
 
-    public Worker(ILogger<Worker> logger, IHttpClientFactory httpClientFactory)
+    public Worker(ILogger<Worker> logger, IOptions<HoneyGainApplicationSettings> settings, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient("HoneyGain");
 
+        _webhook = new DiscordWebhookClient(settings.Value.WebhookUrl);
+        
 #if !DEBUG
         _interval = TimeSpan.FromHours(1);
 #else
@@ -36,42 +41,106 @@ public class Worker : BackgroundService
             
             var contestWinningGetRequest = await _httpClient.GetAsync("contest_winnings", stoppingToken);
 
-            var responseBody = await contestWinningGetRequest.Content.ReadFromJsonAsync<ContestWinningsPayload>(cancellationToken: stoppingToken);
+            if (!contestWinningGetRequest.IsSuccessStatusCode)
+            {
+                _logger.LogError("{DateTime} | Failed to get the current lucky pot status, statusCode: {StatusCode}",
+                    DateTime.Now,
+                    contestWinningGetRequest.StatusCode);
 
-            if (responseBody is null) throw new NullReferenceException("Cannot parse null body!");
+                continue;
+            }
+
+            var getPayload = await contestWinningGetRequest.Content.ReadFromJsonAsync<GetContestWinningsPayload>(cancellationToken: stoppingToken);
+
+            if (getPayload is null) 
+                throw new NullReferenceException("Cannot parse body!");
             
             _logger.LogDebug("{DateTime} | Executed request GET contest_winnings | Status Code: {StatusCode} | Response: {Response}",
-                DateTime.UtcNow,
+                DateTime.Now,
                 contestWinningGetRequest.StatusCode, 
-                JsonSerializer.Serialize(responseBody));
+                JsonSerializer.Serialize(getPayload));
 
-            if (responseBody.Data.ProgressBytes < responseBody.Data.MaxBytes) 
+            if (getPayload.Data.ProgressBytes < getPayload.Data.MaxBytes) 
                 continue;
 
-            if (responseBody.Data.WinningCredits is not null)
+            if (getPayload.Data.WinningCredits is not null)
             {
                 _lastRun = DateTime.UtcNow;
                 continue;
             }
 
-            var contestWinningPostRequest = await _httpClient.PostAsync("contest_winnings", null, stoppingToken);
+            var contestWinningsClaimRequest = await _httpClient.PostAsync("contest_winnings", null, stoppingToken);
 
-            if (contestWinningPostRequest.StatusCode != HttpStatusCode.OK) 
-                throw new Exception("Error trying to claim the thing");
+            if (!contestWinningsClaimRequest.IsSuccessStatusCode)
+            {
+                _logger.LogError("{DateTime} | Failed to claim the lucky pot, statusCode: {StatusCode}",
+                    DateTime.Now,
+                    contestWinningsClaimRequest.StatusCode);
+
+                continue;
+            }
+
+            var claimPayload = await contestWinningsClaimRequest.Content.ReadFromJsonAsync<ClaimContestWinningsPayload>(cancellationToken: stoppingToken);
+            
+            if (claimPayload is null) 
+                throw new NullReferenceException("Cannot parse body!");
+            
+            _logger.LogDebug("{DateTime} | Executed request POST contest_winnings | Status Code: {StatusCode} | Response: {Response}",
+                DateTime.Now,
+                contestWinningsClaimRequest.StatusCode, 
+                JsonSerializer.Serialize(claimPayload));
+
+            await SendDiscordWebhookMessageAsync(claimPayload.Data);
             
             _lastRun = DateTime.UtcNow;
         }
     }
+
+    private const string AvatarUrl = "https://th.bing.com/th/id/OIP.yPdcsofpZ5jxhQMu72zK-wHaHa?pid=ImgDet&rs=1";
+
+    private async Task SendDiscordWebhookMessageAsync(InnerClaimContestWinningsPayload payload)
+    {
+        var embed = new EmbedBuilder()
+           .WithTitle("HoneyGain lucky pot")
+           .WithDescription($"You got {payload.WinningCredits} credits!")
+           .WithColor(Color.Green)
+           .WithTimestamp(DateTimeOffset.Now)
+           .Build();
+
+        await _webhook.SendMessageAsync(embeds: new[] { embed }, username: "HoneyGain lucky pot auto-claimer", avatarUrl: AvatarUrl);
+    }
     
     // ReSharper disable once ClassNeverInstantiated.Local
-    private record ContestWinningsPayload(
+    private record GetContestWinningsPayload(
         // ReSharper disable once NotAccessedPositionalProperty.Local
-        [property: JsonPropertyName("meta")] object? Meta, 
-        [property: JsonPropertyName("data")] InnerContestWinningsPayload Data);
+        [property: JsonPropertyName("meta")] 
+        object? Meta,
+        [property: JsonPropertyName("data")] 
+        InnerGetContestWinningsPayload Data
+    );
+
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private record InnerGetContestWinningsPayload(
+        [property: JsonPropertyName("progress_bytes")]
+        int ProgressBytes,
+        [property: JsonPropertyName("max_bytes")]
+        int MaxBytes,
+        [property: JsonPropertyName("winning_credits")]
+        double? WinningCredits
+    );
     
     // ReSharper disable once ClassNeverInstantiated.Local
-    private record InnerContestWinningsPayload(
-        [property: JsonPropertyName("progress_bytes")] int ProgressBytes, 
-        [property: JsonPropertyName("max_bytes")] int MaxBytes,
-        [property: JsonPropertyName("winning_credits")] double? WinningCredits);
+    private record ClaimContestWinningsPayload(
+        // ReSharper disable once NotAccessedPositionalProperty.Local
+        [property: JsonPropertyName("meta")] 
+        object? Meta,
+        [property: JsonPropertyName("data")] 
+        InnerClaimContestWinningsPayload Data
+    );
+
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private record InnerClaimContestWinningsPayload(
+        [property: JsonPropertyName("winning_credits")]
+        double WinningCredits
+    );
 }

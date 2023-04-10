@@ -11,6 +11,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Discord.Net.Webhook" Version="3.10.0" />
         <PackageReference Include="Karambolo.Extensions.Logging.File" Version="3.4.0" />
         <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="7.0.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />

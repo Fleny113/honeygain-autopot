@@ -14,6 +14,8 @@ builder.ConfigureLogging((ctx, loggingBuilder) =>
 
 builder.ConfigureServices(services =>
 {
+    services.AddOptions<HoneyGainApplicationSettings>();
+    
     services.AddHttpClient("HoneyGain", (serviceProvider, client) =>
     {
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
