@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using HoneyGainAutoRewardPot;
+using Microsoft.Extensions.Options;
 
 var builder = Host.CreateDefaultBuilder(args);
 
@@ -12,22 +13,20 @@ builder.ConfigureLogging((ctx, loggingBuilder) =>
     });
 });
 
-builder.ConfigureServices(services =>
+
+builder.ConfigureServices((context, services) =>
 {
-    services.AddOptions<HoneyGainApplicationSettings>();
+    services.Configure<HoneyGainApplicationSettings>(context.Configuration.GetSection(HoneyGainApplicationSettings.SectionName));
     
     services.AddHttpClient("HoneyGain", (serviceProvider, client) =>
     {
-        var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        
-        var settings = new HoneyGainApplicationSettings();
-        configuration.GetSection(HoneyGainApplicationSettings.SectionName).Bind(settings);
+        var settings = serviceProvider.GetRequiredService<IOptions<HoneyGainApplicationSettings>>();
 
         client.BaseAddress = new Uri("https://dashboard.honeygain.com/api/v1/");
 
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.Token);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.Value.Token);
 
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(settings.UserAgent);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(settings.Value.UserAgent);
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/plain, */*");
     });
     
