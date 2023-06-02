@@ -1,6 +1,9 @@
 using System.Net.Http.Headers;
 using HoneyGainAutoRewardPot;
 using Microsoft.Extensions.Options;
+using dotenv.net;
+
+DotEnv.Load();
 
 var builder = Host.CreateDefaultBuilder(args);
 
@@ -13,11 +16,11 @@ builder.ConfigureLogging((ctx, loggingBuilder) =>
     });
 });
 
-
 builder.ConfigureServices((context, services) =>
 {
-    services.Configure<HoneyGainApplicationSettings>(context.Configuration.GetSection(HoneyGainApplicationSettings.SectionName));
-    
+    services.AddOptions<HoneyGainApplicationSettings>()
+        .BindConfiguration(HoneyGainApplicationSettings.SectionName);
+
     services.AddHttpClient("HoneyGain", (serviceProvider, client) =>
     {
         var settings = serviceProvider.GetRequiredService<IOptions<HoneyGainApplicationSettings>>();
@@ -25,12 +28,9 @@ builder.ConfigureServices((context, services) =>
         client.BaseAddress = new Uri("https://dashboard.honeygain.com/api/v1/");
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.Value.Token);
-
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(settings.Value.UserAgent);
-        client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/plain, */*");
     });
-    
-    services.AddHostedService<Worker>();
+
+    services.AddHostedService<RewardPotClaimer>();
 });
 
 var app = builder.Build();
