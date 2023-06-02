@@ -24,4 +24,10 @@
         <Content Remove="Logs\**" />
         <None Remove="Logs\**" />
     </ItemGroup>
+
+    <ItemGroup>
+        <None Update=".env">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 </Project>
