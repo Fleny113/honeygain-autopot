@@ -140,7 +140,7 @@ public class Worker : BackgroundService
 
     // ReSharper disable once ClassNeverInstantiated.Local
     private record InnerClaimContestWinningsPayload(
-        [property: JsonPropertyName("winning_credits")]
+        [property: JsonPropertyName("credits")]
         double WinningCredits
     );
 }
