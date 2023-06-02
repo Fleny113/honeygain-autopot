@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HoneyGainAutoRewardPot", "HoneyGainAutoRewardPot.csproj", "{013B8CAE-7F9F-4812-893B-62DDDEAFA5FC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HoneyGainAutoPot", "HoneyGainAutoPot.csproj", "{013B8CAE-7F9F-4812-893B-62DDDEAFA5FC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -1,5 +1,5 @@
 using System.Net.Http.Headers;
-using HoneyGainAutoRewardPot;
+using HoneyGainAutoPot;
 using Microsoft.Extensions.Options;
 using dotenv.net;
 

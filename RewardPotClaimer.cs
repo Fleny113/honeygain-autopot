@@ -4,7 +4,7 @@ using Discord;
 using Discord.Webhook;
 using Microsoft.Extensions.Options;
 
-namespace HoneyGainAutoRewardPot;
+namespace HoneyGainAutoPot;
 
 public sealed class RewardPotClaimer : BackgroundService
 {

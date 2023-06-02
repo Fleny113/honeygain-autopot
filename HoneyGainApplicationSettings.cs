@@ -1,4 +1,4 @@
-﻿namespace HoneyGainAutoRewardPot;
+﻿namespace HoneyGainAutoPot;
 
 public sealed record HoneyGainApplicationSettings
 {

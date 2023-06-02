@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace HoneyGainAutoRewardPot;
+namespace HoneyGainAutoPot;
 
 internal record HoneyGainResponse<TData>(
     [property: JsonPropertyName("meta")] object? Meta,
