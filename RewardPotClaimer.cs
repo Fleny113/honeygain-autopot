@@ -1,100 +1,83 @@
+using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using Discord;
 using Discord.Webhook;
 using Microsoft.Extensions.Options;
 
 namespace HoneyGainAutoPot;
 
-public sealed class RewardPotClaimer : BackgroundService
+public sealed partial class RewardPotClaimer(ILogger<RewardPotClaimer> logger, IOptions<HoneyGainApplicationSettings> settings, IHttpClientFactory httpClientFactory)
+    : BackgroundService
 {
-    private readonly ILogger<RewardPotClaimer> _logger;
-    private readonly HttpClient _httpClient;
-    private readonly TimeSpan _interval;
-    private readonly DiscordWebhookClient _webhook;
-
+    private readonly HttpClient _httpClient = httpClientFactory.CreateClient("HoneyGain");
+    private readonly DiscordWebhookClient _webhook = new(settings.Value.WebhookUrl);
     private static DateTimeOffset _lastRun = DateTimeOffset.UtcNow.AddDays(-1);
+    private static bool _isFirstRun = true;
 
-    public RewardPotClaimer(ILogger<RewardPotClaimer> logger, IOptions<HoneyGainApplicationSettings> settings, IHttpClientFactory httpClientFactory, IHostEnvironment environment)
-    {
-        _logger = logger;
-
-        _httpClient = httpClientFactory.CreateClient("HoneyGain");
-
-        _webhook = new DiscordWebhookClient(settings.Value.WebhookUrl);
-
-        _interval = environment.IsDevelopment()
-            ? TimeSpan.FromMinutes(1)
-            : TimeSpan.FromHours(1);
-    }
+    private const string AvatarUrl = "https://s3-eu-west-1.amazonaws.com/tpd/logos/5db47bcc4de43a0001b54999/0x0.png";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var periodicTimer = new PeriodicTimer(_interval);
+        var periodicTimer = new PeriodicTimer(TimeSpan.FromHours(1));
 
-        while (!stoppingToken.IsCancellationRequested && await periodicTimer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested && (_isFirstRun || await periodicTimer.WaitForNextTickAsync(stoppingToken)))
         {
+            _isFirstRun = false;
+            
             if (_lastRun.Day == DateTimeOffset.UtcNow.Day)
                 continue;
 
+            // Try get the current status of the lucky pot
             var getWinningsRequest = await _httpClient.GetAsync("contest_winnings", stoppingToken);
 
             if (!getWinningsRequest.IsSuccessStatusCode)
             {
-                _logger.LogError("{DateTime} | Failed to get the current lucky pot status, statusCode: {StatusCode}",
-                    DateTimeOffset.Now,
-                    getWinningsRequest.StatusCode);
-
+                LogFailedCurrentPotFetch(logger, DateTimeOffset.Now, getWinningsRequest.StatusCode);
                 continue;
             }
 
-            var getWinningsResponse = await getWinningsRequest.Content.ReadFromJsonAsync<HoneyGainResponse<GetWinningsData>>(cancellationToken: stoppingToken);
+            var getWinningsResponse =
+                await getWinningsRequest.Content.ReadFromJsonAsync<HoneyGainResponse<GetWinningsData>>(cancellationToken: stoppingToken);
 
+            // We want to ignore the request and try later
             if (getWinningsResponse is null)
-                throw new NullReferenceException("Cannot parse body!");
+                continue;
 
-            _logger.LogDebug("{DateTime} | Executed request GET contest_winnings | Status Code: {StatusCode} | Response: {Response}",
-                DateTimeOffset.Now,
-                getWinningsRequest.StatusCode,
-                JsonSerializer.Serialize(getWinningsResponse));
+            LogSuccessCurrentPotFetch(logger, DateTimeOffset.Now, getWinningsRequest.StatusCode, getWinningsResponse);
 
+            // Check if the current progress is less then the needed amount, if so, retry later
             if (getWinningsResponse.Data.ProgressBytes < getWinningsResponse.Data.MaxBytes)
                 continue;
 
+            // The pot is already claimed, mark the day as done and check again later
             if (getWinningsResponse.Data.WinningCredits is not null)
             {
                 _lastRun = DateTimeOffset.UtcNow;
                 continue;
             }
 
+            // Redeem the pot
             var claimWinningsRequest = await _httpClient.PostAsync("contest_winnings", null, stoppingToken);
-
+            
             if (!claimWinningsRequest.IsSuccessStatusCode)
             {
-                _logger.LogError("{DateTime} | Failed to claim the lucky pot, statusCode: {StatusCode}",
-                    DateTimeOffset.Now,
-                    claimWinningsRequest.StatusCode);
-
+                LogFailedRedeemPotFetch(logger, DateTimeOffset.Now, claimWinningsRequest.StatusCode);
                 continue;
             }
 
-            var claimWinningsResponse = await claimWinningsRequest.Content.ReadFromJsonAsync<HoneyGainResponse<ClaimWinningsData>>(cancellationToken: stoppingToken);
+            var claimWinningsResponse = 
+                await claimWinningsRequest.Content.ReadFromJsonAsync<HoneyGainResponse<ClaimWinningsData>>(cancellationToken: stoppingToken);
 
+            // There was an error reading the request body, retry later (as this is a redeem, we might miss the WebHook call)
             if (claimWinningsResponse is null)
-                throw new NullReferenceException("Cannot parse body!");
+                continue;
 
-            _logger.LogDebug("{DateTime} | Executed request POST contest_winnings | Status Code: {StatusCode} | Response: {Response}",
-                DateTimeOffset.Now,
-                claimWinningsRequest.StatusCode,
-                JsonSerializer.Serialize(claimWinningsResponse));
-
-            await SendDiscordWebhookMessageAsync(claimWinningsResponse.Data);
-
+            LogSuccessRedeemPotFetch(logger, DateTimeOffset.Now, claimWinningsRequest.StatusCode, claimWinningsResponse);
             _lastRun = DateTimeOffset.UtcNow;
+            
+            await SendDiscordWebhookMessageAsync(claimWinningsResponse.Data);
         }
     }
-
-    private const string AvatarUrl = "https://s3-eu-west-1.amazonaws.com/tpd/logos/5db47bcc4de43a0001b54999/0x0.png";
 
     private async Task SendDiscordWebhookMessageAsync(ClaimWinningsData data)
     {
@@ -107,4 +90,30 @@ public sealed class RewardPotClaimer : BackgroundService
 
         await _webhook.SendMessageAsync(embeds: new[] { embed }, username: "HoneyGain lucky pot auto-claimer", avatarUrl: AvatarUrl);
     }
+
+    [LoggerMessage(
+        EventId = 0,
+        Level = LogLevel.Error, 
+        Message = "{DateTime} | Failed to get the current lucky pot status, statusCode: {StatusCode}")]
+    private static partial void LogFailedCurrentPotFetch(ILogger logger, DateTimeOffset dateTime, HttpStatusCode statusCode);
+    
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error, 
+        Message = "{DateTime} | Failed to claim the lucky pot, statusCode: {StatusCode}")]
+    private static partial void LogFailedRedeemPotFetch(ILogger logger, DateTimeOffset dateTime, HttpStatusCode statusCode);
+    
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Debug, 
+        Message = "{DateTime} | Executed request GET /contest_winnings | Status Code: {StatusCode} | Response: {Response}")]
+    private static partial void LogSuccessCurrentPotFetch(ILogger logger, DateTimeOffset dateTime, HttpStatusCode statusCode, 
+        HoneyGainResponse<GetWinningsData> response);
+    
+    [LoggerMessage(
+        EventId = 11,
+        Level = LogLevel.Debug, 
+        Message = "{DateTime} | Executed request POST /contest_winnings | Status Code: {StatusCode} | Response: {Response}")]
+    private static partial void LogSuccessRedeemPotFetch(ILogger logger, DateTimeOffset dateTime, HttpStatusCode statusCode, 
+        HoneyGainResponse<ClaimWinningsData> response);
 }

@@ -1,5 +1,5 @@
 ﻿{
-  "$schema": "http://json.schemastore.org/launchsettings.json",
+  "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
     "HoneyGainAutoRewardPot": {
       "commandName": "Project",
@@ -7,6 +7,10 @@
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }
+    },
+    "HoneyGainAutoRewardPot-ENV-Prod": {
+      "commandName": "Project",
+      "dotnetRunMessages": true
     }
   }
 }

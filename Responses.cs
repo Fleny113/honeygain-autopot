@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 namespace HoneyGainAutoPot;
 
 internal record HoneyGainResponse<TData>(
-    [property: JsonPropertyName("meta")] object? Meta,
     [property: JsonPropertyName("data")] TData Data
 );
 

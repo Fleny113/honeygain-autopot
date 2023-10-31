@@ -16,17 +16,17 @@ builder.ConfigureLogging((ctx, loggingBuilder) =>
     });
 });
 
-builder.ConfigureServices((context, services) =>
+builder.ConfigureServices(services =>
 {
     services.AddOptions<HoneyGainApplicationSettings>()
-        .BindConfiguration(HoneyGainApplicationSettings.SectionName);
-
+        .BindConfiguration(HoneyGainApplicationSettings.SectionName)
+        .Validate(settings => settings is { Token: not null, WebhookUrl: not null });
+    
     services.AddHttpClient("HoneyGain", (serviceProvider, client) =>
     {
         var settings = serviceProvider.GetRequiredService<IOptions<HoneyGainApplicationSettings>>();
 
         client.BaseAddress = new Uri("https://dashboard.honeygain.com/api/v1/");
-
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.Value.Token);
     });
 

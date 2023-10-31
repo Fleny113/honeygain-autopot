@@ -1,9 +1,11 @@
-﻿namespace HoneyGainAutoPot;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace HoneyGainAutoPot;
 
 public sealed record HoneyGainApplicationSettings
 {
     public const string SectionName = "HoneyGain";
 
-    public required string Token { get; set; }
-    public required string WebhookUrl { get; set; }
+    [Required] public required string Token { get; init; }
+    [Required] public required string WebhookUrl { get; init; }
 }
