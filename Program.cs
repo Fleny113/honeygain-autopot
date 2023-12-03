@@ -3,13 +3,25 @@ using HoneyGainAutoPot;
 using Microsoft.Extensions.Options;
 using dotenv.net;
 
-DotEnv.Load();
+DotEnv.Fluent()
+    .WithEnvFiles(".env", $"{AppContext.BaseDirectory}/.env")
+    .WithoutExceptions()
+    .Load();
 
 var builder = Host.CreateDefaultBuilder(args);
+
+builder.ConfigureHostConfiguration(config =>
+{
+    config.AddJsonFile($"{AppContext.BaseDirectory}/appsettings.json", optional: true);
+});
 
 builder.ConfigureLogging((ctx, loggingBuilder) =>
 {
     loggingBuilder.AddConfiguration(ctx.Configuration.GetSection("Logging"));
+
+    if (ctx.Configuration.GetValue<bool>($"{HoneyGainApplicationSettings.SectionName}:{nameof(HoneyGainApplicationSettings.DontLog)}"))
+        return;
+
     loggingBuilder.AddFile(o =>
     {
         o.RootPath = Environment.CurrentDirectory;

@@ -8,4 +8,5 @@ public sealed record HoneyGainApplicationSettings
 
     [Required] public required string Token { get; init; }
     [Required] public required string WebhookUrl { get; init; }
+    public bool DontLog { get; init; } = false;
 }
