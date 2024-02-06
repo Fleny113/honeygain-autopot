@@ -33,7 +33,7 @@ builder.ConfigureServices(services =>
     services.AddOptions<HoneyGainApplicationSettings>()
         .BindConfiguration(HoneyGainApplicationSettings.SectionName)
         .Validate(settings => settings is { Token: not null, WebhookUrl: not null });
-    
+
     services.AddHttpClient("HoneyGain", (serviceProvider, client) =>
     {
         var settings = serviceProvider.GetRequiredService<IOptions<HoneyGainApplicationSettings>>();
